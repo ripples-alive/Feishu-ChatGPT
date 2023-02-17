@@ -36,7 +36,7 @@ DB_FILE = "db.json"
 # 更多可选配置，请看：README.zh.md->如何构建应用配置（AppSettings）。
 app_settings = Config.new_internal_app_settings_from_env()
 
-# 当前访问的是飞书，使用默认存储、默认日志（Error级别），更多可选配置，请看：README.zh.md->如何构建整体配置（Config）。
+# 当前访问的是飞书，使用默认存储、默认日志（Error级别），更多可选配置，请看：README.zh.md->如何构建整体配置（Config）
 conf = Config(DOMAIN_FEISHU, app_settings, log_level=LEVEL_DEBUG)
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.DEBUG)
 
@@ -206,7 +206,8 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
             msg = "/help: 查看命令说明\n"
             msg += "/reset: 重新开始对话\n"
             msg += "/delete: 删除当前对话\n"
-            msg += "/title: 修改对话标题\n"
+            msg += "/title <title>: 修改对话标题（不支持中文）\n"
+            msg += "/rollback <n>: 回滚 n 条消息\n"
         elif cmd == "/reset":
             chatbot.reset_chat()
             set_conf(uuid, {})
@@ -225,10 +226,27 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
                     title = args[0].strip()
                     name = get_user_name(open_id)
                     title = f"{name} - {title}"
-                    chatbot.change_title(conversation_id, title)
-                    msg = f"成功修改标题为：{title}"
+                    try:
+                        chatbot.change_title(conversation_id, title)
+                        msg = f"成功修改标题为：{title}"
+                    except Exception:
+                        msg = f"修改标题失败"
                 else:
                     msg = "标题不存在"
+            elif cmd == "/rollback":
+                if args:
+                    n = int(args[0])
+                else:
+                    n = 1
+
+                conf = get_conf(uuid)
+                parent_ids = conf["parent_ids"]
+                if 1 <= n <= len(parent_ids):
+                    conf["parent_ids"] = parent_ids[:-n]
+                    set_conf(uuid, conf)
+                    msg = f"成功回滚 {n} 条消息"
+                else:
+                    msg = "回滚范围不合法"
             else:
                 msg = "无效命令"
 
