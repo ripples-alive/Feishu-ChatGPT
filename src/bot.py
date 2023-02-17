@@ -3,6 +3,7 @@
 
 import json
 import logging
+import time
 import traceback
 from queue import Queue
 
@@ -63,41 +64,51 @@ def set_conf(uuid, conf):
 def worker():
     while True:
         message_id, open_id, uuid, text = queue.get()
-        msg = ask(uuid, open_id, text)
-        reply_message(message_id, msg)
+        try:
+            handle(message_id, open_id, uuid, text)
+        except ChatbotError as e:
+            reply_message(reply_message, f"{e.source}({e.code}): {e.message}")
+        except UnboundLocalError:
+            reply_message(message_id, "获取对话结果失败，请重试")
+        except Exception:
+            traceback.print_exc()
+            reply_message(message_id, "服务器异常，请重试")
 
 
-def ask(uuid, open_id, text):
+def handle(message_id, open_id, uuid, text):
     conf = get_conf(uuid)
     conversation_id = conf.get("conversation_id")
-    parent_id = conf.get("parent_id")
-    new_chat = conversation_id is None
+    parent_ids = conf.get("parent_ids", [])
+    parent_id = parent_ids[-1] if parent_ids else None
 
-    # prevent bug in revChatGPT
-    chatbot.conversation_id = None
-    chatbot.parent_id = None
+    # chat needs to be reset if conversation changes
+    chatbot.reset_chat()
 
     msg = ""
-    try:
-        for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
-            msg = data["message"]
+    update = False
+    last_time = time.time()
+    for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
+        msg = data["message"]
+        if not update:
+            # automatically rename for new chat
+            if conversation_id is None:
+                name = get_user_name(open_id)
+                title = f"{name} - {uuid}"
+                chatbot.change_title(data["conversation_id"], title)
+                reply_message(message_id, f"开始新对话：{title}")
 
-        conversation_id = data["conversation_id"]
-        parent_id = data["parent_id"]
-        conf = dict(conversation_id=conversation_id)
-        set_conf(uuid, conf)
-    except ChatbotError as e:
-        return f"{e.source}({e.code}): {e.message}"
-    except UnboundLocalError:
-        return "获取对话结果失败，请重试"
-    except Exception:
-        traceback.print_exc()
-        return "服务器异常，请重试"
+            resp_message_id = reply_message(message_id, msg, card=True)
+            update = True
+        else:
+            if time.time() - last_time > 0.3:
+                update_message(resp_message_id, msg)
+                last_time = time.time()
 
-    if new_chat:
-        name = get_user_name(open_id)
-        title = f"{name} - {uuid}"
-        chatbot.change_title(conversation_id, title)
+    update_message(resp_message_id, msg)
+
+    parent_ids.append(data["parent_id"])
+    conf = dict(conversation_id=data["conversation_id"], parent_ids=parent_ids)
+    set_conf(uuid, conf)
 
     return msg
 
@@ -108,16 +119,55 @@ def get_user_name(open_id):
     resp = req_call.do()
     log.debug(f"request id = {resp.get_request_id()}")
     log.debug(f"http status code = {resp.get_http_status_code()}")
-    log.debug(f"header = {resp.get_header().items()}")
     if resp.code != 0:
         return "Unknown"
     return resp.data.user.en_name
 
 
-def reply_message(message_id, msg):
+def update_message(message_id, msg):
+    body = model.MessagePatchReqBody()
+    body.content = json.dumps(
+        {
+            "config": {"wide_screen_mode": True},
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": msg,
+                }
+            ],
+        }
+    )
+
+    req_call = im_service.messages.patch(body)
+    req_call.set_message_id(message_id)
+
+    resp = req_call.do()
+    log.debug(f"request id = {resp.get_request_id()}")
+    log.debug(f"http status code = {resp.get_http_status_code()}")
+    if resp.code == 0:
+        log.info(f"update {message_id} success")
+    else:
+        log.error(f"{resp.msg}: {resp.error}")
+
+
+def reply_message(message_id, msg, card=False):
     body = model.MessageCreateReqBody()
-    body.content = json.dumps(dict(text=msg))
-    body.msg_type = "text"
+    if card:
+        body.content = json.dumps(
+            {
+                "config": {"wide_screen_mode": True},
+                "elements": [
+                    {
+                        "tag": "markdown",
+                        "content": msg,
+                    }
+                ],
+            }
+        )
+        body.msg_type = "interactive"
+    else:
+        body.content = json.dumps(dict(text=msg))
+        body.msg_type = "text"
 
     req_call = im_service.messages.reply(body)
     req_call.set_message_id(message_id)
@@ -125,9 +175,9 @@ def reply_message(message_id, msg):
     resp = req_call.do()
     log.debug(f"request id = {resp.get_request_id()}")
     log.debug(f"http status code = {resp.get_http_status_code()}")
-    log.debug(f"header = {resp.get_header().items()}")
     if resp.code == 0:
         log.info(f"message id = {resp.data.message_id}")
+        return resp.data.message_id
     else:
         log.error(f"{resp.msg}: {resp.error}")
 
@@ -158,6 +208,7 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
             msg += "/delete: 删除当前对话\n"
             msg += "/title: 修改对话标题\n"
         elif cmd == "/reset":
+            chatbot.reset_chat()
             set_conf(uuid, {})
             msg = "对话已重新开始"
         else:
