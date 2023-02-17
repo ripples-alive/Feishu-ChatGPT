@@ -1,0 +1,4 @@
+Flask==2.2.2
+larksuite-oapi==1.0.33
+requests==2.22.0
+revChatGPT==2.3.0

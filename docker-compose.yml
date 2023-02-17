@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  chatbot:
+    build: .
+    image: ripples/feishu-chatbot
+    restart: unless-stopped
+    ports:
+      - 8000:8000
+    env_file:
+      - .env
+    volumes:
+      - ./chatbot.json:/src/chatbot.json:ro
+      - ./db.json:/src/db.json
