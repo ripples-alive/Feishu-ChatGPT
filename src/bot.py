@@ -68,8 +68,6 @@ def worker():
             handle(message_id, open_id, uuid, text)
         except ChatbotError as e:
             reply_message(reply_message, f"{e.source}({e.code}): {e.message}")
-        except UnboundLocalError:
-            reply_message(message_id, "获取对话结果失败，请重试")
         except Exception:
             traceback.print_exc()
             reply_message(message_id, "服务器异常，请重试")
@@ -85,11 +83,11 @@ def handle(message_id, open_id, uuid, text):
     chatbot.reset_chat()
 
     msg = ""
-    update = False
+    resp_message_id = None
     last_time = time.time()
     for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
         msg = data["message"]
-        if not update:
+        if resp_message_id is None:
             # automatically rename for new chat
             if conversation_id is None:
                 name = get_user_name(open_id)
@@ -98,19 +96,21 @@ def handle(message_id, open_id, uuid, text):
                 reply_message(message_id, f"开始新对话：{title}")
 
             resp_message_id = reply_message(message_id, msg, card=True)
-            update = True
         else:
             if time.time() - last_time > 0.3:
                 update_message(resp_message_id, msg)
                 last_time = time.time()
+
+    if resp_message_id is None:
+        log.info(f"no response for conversation {conversation_id}")
+        reply_message(message_id, f"获取对话结果失败：\n{chatbot.get_msg_history(conversation_id)}")
+        return
 
     update_message(resp_message_id, msg)
 
     parent_ids.append(data["parent_id"])
     conf = dict(conversation_id=data["conversation_id"], parent_ids=parent_ids)
     set_conf(uuid, conf)
-
-    return msg
 
 
 def get_user_name(open_id):
