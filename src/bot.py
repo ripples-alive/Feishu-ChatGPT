@@ -79,9 +79,6 @@ def handle(message_id, open_id, uuid, text):
     parent_ids = conf.get("parent_ids", [])
     parent_id = parent_ids[-1] if parent_ids else None
 
-    # chat needs to be reset if conversation changes
-    chatbot.reset_chat()
-
     msg = ""
     resp_message_id = None
     last_time = time.time()
@@ -103,7 +100,10 @@ def handle(message_id, open_id, uuid, text):
 
     if resp_message_id is None:
         log.info(f"no response for conversation {conversation_id}")
-        reply_message(message_id, f"获取对话结果失败：\n{chatbot.get_msg_history(conversation_id)}")
+        if conversation_id is None:
+            reply_message(message_id, f"获取对话结果失败：对话不存在")
+        else:
+            reply_message(message_id, f"获取对话结果失败：\n{chatbot.get_msg_history(conversation_id)}")
         return
 
     update_message(resp_message_id, msg)
@@ -219,6 +219,7 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
                 msg = "对话不存在"
             elif cmd == "/delete":
                 chatbot.delete_conversation(conversation_id)
+                chatbot.reset_chat()
                 set_conf(uuid, {})
                 msg = "成功删除对话"
             elif cmd == "/title":
