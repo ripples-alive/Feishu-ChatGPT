@@ -57,8 +57,13 @@ def get_conf(uuid):
 
 def set_conf(uuid, conf):
     db = read_json(DB_FILE, {})
-    db[uuid] = conf
+    db[uuid].update(conf)
     write_json(DB_FILE, db)
+
+
+def reset_chat(uuid):
+    chatbot.reset_chat()
+    set_conf(uuid, dict(conversation_id=None, parent_ids=[]))
 
 
 def worker():
@@ -88,7 +93,8 @@ def handle(message_id, open_id, uuid, text):
             # automatically rename for new chat
             if conversation_id is None:
                 name = get_user_name(open_id)
-                title = f"{name} - {uuid}"
+                title = conf.get("title", uuid)
+                title = f"{name} - {title}"
                 chatbot.change_title(data["conversation_id"], title)
                 reply_message(message_id, f"开始新对话：{title}")
 
@@ -209,8 +215,7 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
             msg += "/title <title>: 修改对话标题（不支持中文）\n"
             msg += "/rollback <n>: 回滚 n 条消息\n"
         elif cmd == "/reset":
-            chatbot.reset_chat()
-            set_conf(uuid, {})
+            reset_chat(uuid)
             msg = "对话已重新开始"
         else:
             conf = get_conf(uuid)
@@ -219,19 +224,20 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
                 msg = "对话不存在"
             elif cmd == "/delete":
                 chatbot.delete_conversation(conversation_id)
-                chatbot.reset_chat()
-                set_conf(uuid, {})
+                reset_chat(uuid)
                 msg = "成功删除对话"
             elif cmd == "/title":
                 if args:
                     title = args[0].strip()
-                    name = get_user_name(open_id)
-                    title = f"{name} - {title}"
                     try:
+                        set_conf(uuid, dict(title=title))
+                        name = get_user_name(open_id)
+                        title = f"{name} - {title}"
                         chatbot.change_title(conversation_id, title)
                         msg = f"成功修改标题为：{title}"
                     except Exception:
-                        msg = f"修改标题失败"
+                        traceback.print_exc()
+                        msg = "修改标题失败"
                 else:
                     msg = "标题不存在"
             elif cmd == "/rollback":
