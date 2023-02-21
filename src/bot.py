@@ -57,7 +57,7 @@ def get_conf(uuid):
 
 def set_conf(uuid, conf):
     db = read_json(DB_FILE, {})
-    db[uuid].update(conf)
+    db.setdefault(uuid, {}).update(conf)
     write_json(DB_FILE, db)
 
 
