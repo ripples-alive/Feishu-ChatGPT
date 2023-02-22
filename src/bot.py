@@ -72,7 +72,7 @@ def worker():
         try:
             handle(message_id, open_id, uuid, text)
         except ChatbotError as e:
-            reply_message(reply_message, f"{e.source}({e.code}): {e.message}")
+            reply_message(message_id, f"{e.source}({e.code}): {e.message}")
         except Exception:
             traceback.print_exc()
             reply_message(message_id, "服务器异常，请重试")
