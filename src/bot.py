@@ -212,7 +212,7 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
             msg = "/help: 查看命令说明\n"
             msg += "/reset: 重新开始对话\n"
             msg += "/delete: 删除当前对话\n"
-            msg += "/title <title>: 修改对话标题（不支持中文）\n"
+            msg += "/title <title>: 修改对话标题\n"
             msg += "/rollback <n>: 回滚 n 条消息\n"
         elif cmd == "/reset":
             reset_chat(uuid)
@@ -220,26 +220,27 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
         else:
             conf = get_conf(uuid)
             conversation_id = conf.get("conversation_id")
-            if conversation_id is None:
-                msg = "对话不存在"
-            elif cmd == "/delete":
-                chatbot.delete_conversation(conversation_id)
-                reset_chat(uuid)
-                msg = "成功删除对话"
-            elif cmd == "/title":
+            if cmd == "/title":
                 if args:
                     title = args[0].strip()
                     try:
                         set_conf(uuid, dict(title=title))
-                        name = get_user_name(open_id)
-                        title = f"{name} - {title}"
-                        chatbot.change_title(conversation_id, title)
+                        if conversation_id is not None:
+                            name = get_user_name(open_id)
+                            title = f"{name} - {title}"
+                            chatbot.change_title(conversation_id, title)
                         msg = f"成功修改标题为：{title}"
                     except Exception:
                         traceback.print_exc()
                         msg = "修改标题失败"
                 else:
                     msg = "标题不存在"
+            elif conversation_id is None:
+                msg = "对话不存在"
+            elif cmd == "/delete":
+                chatbot.delete_conversation(conversation_id)
+                reset_chat(uuid)
+                msg = "成功删除对话"
             elif cmd == "/rollback":
                 if args:
                     n = int(args[0])
