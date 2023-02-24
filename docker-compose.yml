@@ -10,5 +10,6 @@ services:
     env_file:
       - .env
     volumes:
+      - /etc/localtime:/etc/localtime:ro
       - ./chatbot.json:/src/chatbot.json:ro
       - ./db.json:/src/db.json
