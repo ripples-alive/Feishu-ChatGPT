@@ -1,10 +1,16 @@
 # 飞书 ChatGPT 机器人
 
+[飞书开放平台](https://open.feishu.cn/app)
+
 # 事件订阅地址
+
+应用详情 -> 开发配置 -> 事件订阅 -> 请求地址配置
 
 `http://ip:8000/webhook/chatgpt`
 
 # 权限
+
+应用详情 -> 开发配置 -> 权限管理
 
 ```
 contact:contact:readonly_as_app
@@ -28,3 +34,5 @@ echo {} > db.json
 
 docker-compose up -d --build
 ```
+
+> 在 [飞书消息卡片搭建工具](https://open.feishu.cn/tool/cardbuilder) 中上传 [loading.gif](./img/loading.gif)，获取到 key 后填入 `.env` 中后可以在机器人回复生成中显示此动图

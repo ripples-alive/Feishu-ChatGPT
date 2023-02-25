@@ -3,6 +3,7 @@
 
 import json
 import logging
+import os
 import time
 import traceback
 from queue import Queue
@@ -29,6 +30,7 @@ from file import read_json
 from file import write_json
 
 DB_FILE = "db.json"
+LOADING_IMG_KEY = os.environ.get("LOADING_IMG_KEY")
 
 # 企业自建应用的配置
 # AppID、AppSecret: "开发者后台" -> "凭证与基础信息" -> 应用凭证（AppID、AppSecret）
@@ -85,34 +87,31 @@ def handle(message_id, open_id, uuid, text):
     parent_id = parent_ids[-1] if parent_ids else None
 
     msg = ""
-    resp_message_id = None
+    resp_message_id = reply_message(message_id, msg, card=True)
     last_time = time.time()
     for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
+        # automatically rename for new chat
+        if conversation_id is None:
+            name = get_user_name(open_id)
+            title = conf.get("title", uuid)
+            title = f"{name} - {title}"
+            chatbot.change_title(data["conversation_id"], title)
+            reply_message(message_id, f"开始新对话：{title}")
+
         msg = data["message"]
-        if resp_message_id is None:
-            # automatically rename for new chat
-            if conversation_id is None:
-                name = get_user_name(open_id)
-                title = conf.get("title", uuid)
-                title = f"{name} - {title}"
-                chatbot.change_title(data["conversation_id"], title)
-                reply_message(message_id, f"开始新对话：{title}")
+        if time.time() - last_time > 0.3:
+            update_message(resp_message_id, msg)
+            last_time = time.time()
 
-            resp_message_id = reply_message(message_id, msg, card=True)
-        else:
-            if time.time() - last_time > 0.3:
-                update_message(resp_message_id, msg)
-                last_time = time.time()
-
-    if resp_message_id is None:
+    if not msg:
         log.info(f"no response for conversation {conversation_id}")
         if conversation_id is None:
-            reply_message(message_id, f"获取对话结果失败：对话不存在")
+            reply_message(message_id, "获取对话结果失败：对话不存在")
         else:
             reply_message(message_id, f"获取对话结果失败：\n{chatbot.get_msg_history(conversation_id)}")
         return
 
-    update_message(resp_message_id, msg)
+    update_message(resp_message_id, msg, finish=True)
 
     parent_ids.append(data["parent_id"])
     conf = dict(conversation_id=data["conversation_id"], parent_ids=parent_ids)
@@ -130,19 +129,26 @@ def get_user_name(open_id):
     return resp.data.user.en_name
 
 
-def update_message(message_id, msg):
-    body = model.MessagePatchReqBody()
-    body.content = json.dumps(
-        {
-            "config": {"wide_screen_mode": True},
-            "elements": [
+def convert_to_card(msg, finish=False):
+    elements = [{"tag": "div", "text": {"tag": "plain_text", "content": msg}}]
+    if not finish:
+        notes = []
+        if LOADING_IMG_KEY is not None:
+            notes.append(
                 {
-                    "tag": "markdown",
-                    "content": msg,
-                }
-            ],
-        }
-    )
+                    "tag": "img",
+                    "img_key": LOADING_IMG_KEY,
+                    "alt": {"tag": "plain_text", "content": ""},
+                },
+            )
+        notes.append({"tag": "plain_text", "content": "typing..."})
+        elements.append({"tag": "note", "elements": notes})
+    return {"config": {"wide_screen_mode": True}, "elements": elements}
+
+
+def update_message(message_id, msg, finish=False):
+    body = model.MessagePatchReqBody()
+    body.content = json.dumps(convert_to_card(msg, finish))
 
     req_call = im_service.messages.patch(body)
     req_call.set_message_id(message_id)
@@ -156,20 +162,10 @@ def update_message(message_id, msg):
         log.error(f"{resp.msg}: {resp.error}")
 
 
-def reply_message(message_id, msg, card=False):
+def reply_message(message_id, msg, card=False, finish=False):
     body = model.MessageCreateReqBody()
     if card:
-        body.content = json.dumps(
-            {
-                "config": {"wide_screen_mode": True},
-                "elements": [
-                    {
-                        "tag": "markdown",
-                        "content": msg,
-                    }
-                ],
-            }
-        )
+        body.content = json.dumps(convert_to_card(msg, finish))
         body.msg_type = "interactive"
     else:
         body.content = json.dumps(dict(text=msg))
