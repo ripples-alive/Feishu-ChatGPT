@@ -133,7 +133,7 @@ def convert_to_card(msg, finish=False):
     elements = [{"tag": "div", "text": {"tag": "plain_text", "content": msg}}]
     if not finish:
         notes = []
-        if LOADING_IMG_KEY is not None:
+        if LOADING_IMG_KEY:
             notes.append(
                 {
                     "tag": "img",
