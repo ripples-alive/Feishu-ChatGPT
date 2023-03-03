@@ -284,7 +284,7 @@ def webhook_event():
     return resp
 
 
-# 设置 "开发者后台" -> "事件订阅" 请求网址 URL：https://domain/webhook/event
+# 设置 "开发者后台" -> "事件订阅" 请求网址 URL：https://domain/webhook/chatgpt
 if __name__ == "__main__":
     from threading import Thread
 

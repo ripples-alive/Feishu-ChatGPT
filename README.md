@@ -36,3 +36,5 @@ docker-compose up -d --build
 ```
 
 > 在 [飞书消息卡片搭建工具](https://open.feishu.cn/tool/cardbuilder) 中上传 [loading.gif](./img/loading.gif)，获取到 key 后填入 `.env` 中后可以在机器人回复生成中显示此动图
+
+![消息卡片图片上传](./img/upload.jpg)
