@@ -40,7 +40,9 @@ app_settings = Config.new_internal_app_settings_from_env()
 
 # 当前访问的是飞书，使用默认存储、默认日志（Error级别），更多可选配置，请看：README.zh.md->如何构建整体配置（Config）
 conf = Config(DOMAIN_FEISHU, app_settings, log_level=LEVEL_DEBUG)
-logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.DEBUG)
+logging.basicConfig(
+    format="%(asctime)s [%(name)s] %(levelname)s (%(funcName)s): %(message)s", level=logging.INFO, force=True
+)
 
 im_service = ImService(conf)
 contact_service = ContactService(conf)
@@ -107,7 +109,7 @@ def handle(message_id, open_id, uuid, text):
             last_time = time.time()
 
     if not msg:
-        log.info(f"no response for conversation {conversation_id}")
+        log.warn(f"no response for conversation {conversation_id}")
         if conversation_id is None:
             reply_message(message_id, "获取对话结果失败：对话不存在")
         else:
@@ -128,8 +130,10 @@ def get_user_name(open_id):
     log.debug(f"request id = {resp.get_request_id()}")
     log.debug(f"http status code = {resp.get_http_status_code()}")
     if resp.code != 0:
+        log.error(f"{resp.msg}: {resp.error}")
         return "Unknown"
-    return resp.data.user.en_name
+    log.info(f"user: {resp.data.user.name} ({resp.data.user.en_name})")
+    return resp.data.user.name
 
 
 def convert_to_card(msg, finish=False):
@@ -181,7 +185,7 @@ def reply_message(message_id, msg, card=False, finish=False):
     log.debug(f"request id = {resp.get_request_id()}")
     log.debug(f"http status code = {resp.get_http_status_code()}")
     if resp.code == 0:
-        log.info(f"message id = {resp.data.message_id}")
+        log.info(f"reply for {message_id}: {resp.data.message_id}")
         return resp.data.message_id
     else:
         log.error(f"{resp.msg}: {resp.error}")
@@ -198,11 +202,13 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
         reply_message(message.message_id, "暂时只能处理文本消息")
         return
 
-    text: str = json.loads(message.content).get("text")
-    text = text.replace("@_user_1", "").strip()
-
     open_id = event.event.sender.sender_id.open_id
     uuid = f"{open_id}@{message.chat_id}"
+
+    text: str = json.loads(message.content).get("text")
+    log.info(f"<{uuid}> {message.message_id}: {text}")
+    text = text.replace("@_user_1", "").strip()
+
     if text.startswith("/"):
         cmds = text.split()
         cmd = cmds[0]
