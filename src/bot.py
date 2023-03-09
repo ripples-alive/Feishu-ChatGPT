@@ -99,7 +99,7 @@ def handle(message_id, open_id, uuid, text):
                 name = get_user_name(open_id)
                 title = conf.get("title", uuid)
                 title = f"{name} - {title}"
-                chatbot.change_title(data["conversation_id"], title)
+                # chatbot.change_title(data["conversation_id"], title)
                 reply_message(message_id, f"开始新对话：{title}")
                 first_init = False
 
