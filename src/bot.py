@@ -85,21 +85,16 @@ def handle(message_id, open_id, uuid, text):
     parent_ids = conf.get("parent_ids", [])
     parent_id = parent_ids[-1] if parent_ids else None
 
+    name = get_user_name(open_id)
+    title = conf.get("title", uuid)
+    title = f"{name} - {title}"
+    if conversation_id is None:
+        reply_message(message_id, f"开始新对话：{title}")
+
     msg = ""
     resp_message_id = reply_message(message_id, msg, card=True)
     last_time = time.time()
-    first_init = True
     for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
-        # automatically rename for new chat
-        if conversation_id is None:
-            if first_init:
-                name = get_user_name(open_id)
-                title = conf.get("title", uuid)
-                title = f"{name} - {title}"
-                chatbot.change_title(data["conversation_id"], title)
-                reply_message(message_id, f"开始新对话：{title}")
-                first_init = False
-
         msg = data["message"]
         if time.time() - last_time > 0.3:
             update_message(resp_message_id, msg)
@@ -118,6 +113,9 @@ def handle(message_id, open_id, uuid, text):
     parent_ids.append(data["parent_id"])
     conf = dict(conversation_id=data["conversation_id"], parent_ids=parent_ids)
     set_conf(uuid, conf)
+
+    # automatically rename everytime
+    chatbot.change_title(data["conversation_id"], title)
 
 
 def get_user_name(open_id):
