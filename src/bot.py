@@ -24,7 +24,6 @@ from larksuiteoapi.service.im.v1 import MessageReceiveEventHandler
 from larksuiteoapi.service.im.v1 import Service as ImService
 from larksuiteoapi.service.im.v1 import model
 from revChatGPT.V1 import Chatbot
-from revChatGPT.V1 import Error as ChatbotError
 
 from file import read_json
 from file import write_json
@@ -75,8 +74,6 @@ def worker():
         message_id, open_id, uuid, text = queue.get()
         try:
             handle(message_id, open_id, uuid, text)
-        except ChatbotError as e:
-            reply_message(message_id, f"{e.source}({e.code}): {e.message}")
         except Exception:
             traceback.print_exc()
             reply_message(message_id, "服务器异常，请重试")
