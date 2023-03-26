@@ -9,7 +9,18 @@ services:
       - 8000:8000
     env_file:
       - .env
+    environment:
+      - CHATGPT_BASE_URL=http://proxy:8080/api/
+    depends_on:
+      - proxy
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./chatbot.json:/src/chatbot.json:ro
       - ./db.json:/src/db.json
+
+  proxy:
+    build: proxy
+    image: ripples/chatgpt-proxy
+    restart: unless-stopped
+    env_file:
+      - .env
