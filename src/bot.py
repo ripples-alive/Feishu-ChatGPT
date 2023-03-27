@@ -41,8 +41,9 @@ app_settings = Config.new_internal_app_settings_from_env()
 
 # 当前访问的是飞书，使用默认存储、默认日志（Error级别），更多可选配置，请看：README.zh.md->如何构建整体配置（Config）
 conf = Config(DOMAIN_FEISHU, app_settings, log_level=LEVEL_DEBUG)
+log_level = logging.getLevelName(os.environ.get("LOG_LEVEL").upper() or "INFO")
 logging.basicConfig(
-    format="%(asctime)s [%(name)s] %(levelname)s (%(funcName)s): %(message)s", level=logging.INFO, force=True
+    format="%(asctime)s [%(name)s] %(levelname)s (%(funcName)s): %(message)s", level=log_level, force=True
 )
 
 im_service = ImService(conf)
