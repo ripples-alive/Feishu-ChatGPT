@@ -7,6 +7,7 @@ import os
 import time
 import traceback
 from queue import Queue
+from uuid import uuid4
 
 from flask import Flask
 from flask import request
@@ -23,6 +24,7 @@ from larksuiteoapi.service.im.v1 import MessageReceiveEvent
 from larksuiteoapi.service.im.v1 import MessageReceiveEventHandler
 from larksuiteoapi.service.im.v1 import Service as ImService
 from larksuiteoapi.service.im.v1 import model
+from revChatGPT.typing import Error as ChatGPTError
 from revChatGPT.V1 import Chatbot
 
 from file import read_json
@@ -74,6 +76,8 @@ def worker():
         message_id, open_id, uuid, text = queue.get()
         try:
             handle(message_id, open_id, uuid, text)
+        except ChatGPTError as e:
+            reply_message(message_id, f"{e.source}({e.code}): {e.message}")
         except Exception:
             traceback.print_exc()
             reply_message(message_id, "服务器异常，请重试")
@@ -81,7 +85,7 @@ def worker():
 
 def handle(message_id, open_id, uuid, text):
     conf = get_conf(uuid)
-    conversation_id = conf.get("conversation_id")
+    conversation_id = conf.get("conversation_id") or uuid4()
     parent_ids = conf.get("parent_ids", [])
     parent_id = parent_ids[-1] if parent_ids else None
 
@@ -238,7 +242,10 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
             elif conversation_id is None:
                 msg = "对话不存在"
             elif cmd == "/delete":
-                chatbot.delete_conversation(conversation_id)
+                try:
+                    chatbot.delete_conversation(conversation_id)
+                except Exception:
+                    pass
                 reset_chat(uuid)
                 msg = "成功删除对话"
             elif cmd == "/rollback":
