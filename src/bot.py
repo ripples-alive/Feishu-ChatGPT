@@ -77,11 +77,6 @@ def set_conf(uuid, conf):
     write_json(DB_FILE, db)
 
 
-def reset_chat(uuid):
-    chatbot.reset_chat()
-    set_conf(uuid, dict(conversation_id=None, parent_ids=[]))
-
-
 def worker(queue):
     def decorator(func):
         def wrapper():
@@ -128,19 +123,21 @@ def handle_cmd(message_id, open_id, uuid, text):
     if cmd == "/help":
         msg = "/help: 查看命令说明\n"
         msg += "/reset: 重新开始对话\n"
-        msg += "/delete: 删除当前对话\n"
         msg += "/title <title>: 修改对话标题\n"
         msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}）\n"
         msg += "/rollback <n>: 回滚 n 条消息\n"
         return msg
-    elif cmd == "/reset":
-        reset_chat(uuid)
-        return "对话已重新开始"
 
     conf = get_conf(uuid)
     conversation_id = conf.get("conversation_id")
 
-    if cmd == "/title":
+    if cmd == "/reset":
+        chatbot.reset_chat()
+        set_conf(uuid, dict(conversation_id=None, parent_ids=[]))
+        if conversation_id is not None:
+            chatbot.delete_conversation(conversation_id)
+        return "对话已重新开始"
+    elif cmd == "/title":
         if not args:
             return "标题不存在"
 
@@ -166,11 +163,7 @@ def handle_cmd(message_id, open_id, uuid, text):
     if conversation_id is None:
         return "对话不存在"
 
-    if cmd == "/delete":
-        reset_chat(uuid)
-        chatbot.delete_conversation(conversation_id)
-        return "成功删除对话"
-    elif cmd == "/rollback":
+    if cmd == "/rollback":
         if args:
             n = int(args[0])
         else:
