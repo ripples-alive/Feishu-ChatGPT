@@ -33,6 +33,12 @@ from file import write_json
 DB_FILE = "db.json"
 LOADING_IMG_KEY = environ.get("LOADING_IMG_KEY")
 
+ALL_MODELS = {
+    "default": "text-davinci-002-render-sha",
+    "legacy": "text-davinci-002-render-paid",
+    "gpt-4": "gpt-4",
+}
+
 # 企业自建应用的配置
 # AppID、AppSecret: "开发者后台" -> "凭证与基础信息" -> 应用凭证（AppID、AppSecret）
 # VerificationToken、EncryptKey："开发者后台" -> "事件订阅" -> 事件订阅（VerificationToken、EncryptKey）
@@ -124,6 +130,7 @@ def handle_cmd(message_id, open_id, uuid, text):
         msg += "/reset: 重新开始对话\n"
         msg += "/delete: 删除当前对话\n"
         msg += "/title <title>: 修改对话标题\n"
+        msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}）\n"
         msg += "/rollback <n>: 回滚 n 条消息\n"
         return msg
     elif cmd == "/reset":
@@ -144,6 +151,17 @@ def handle_cmd(message_id, open_id, uuid, text):
             title = f"{name} - {title}"
             chatbot.change_title(conversation_id, title)
         return f"成功修改标题为：{title}"
+
+    if cmd == "/model":
+        if not args:
+            return "模型不存在"
+
+        model = args[0].strip().lower()
+        if model not in ALL_MODELS:
+            return "模型不存在"
+
+        set_conf(uuid, dict(model=ALL_MODELS[model]))
+        return f"成功修改模型为：{model} ({ALL_MODELS[model]})"
 
     if conversation_id is None:
         return "对话不存在"
