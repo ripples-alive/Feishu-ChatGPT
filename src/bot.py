@@ -53,7 +53,8 @@ log = logging.getLogger("bot")
 
 chatbot = Chatbot(read_json("chatbot.json"))
 
-queue = Queue()
+cmd_queue = Queue()
+msg_queue = Queue()
 
 
 def get_conf(uuid):
@@ -72,32 +73,106 @@ def reset_chat(uuid):
     set_conf(uuid, dict(conversation_id=None, parent_ids=[]))
 
 
-def worker():
-    while True:
-        message_id, open_id, uuid, text = queue.get()
-        try:
-            handle(message_id, open_id, uuid, text)
-        except ChatGPTError as e:
-            reply_message(message_id, f"{e.source}({e.code}): {e.message}")
-        except Exception:
-            traceback.print_exc()
-            reply_message(message_id, "服务器异常，请重试")
+def worker(queue):
+    def decorator(func):
+        def wrapper():
+            while True:
+                args = queue.get()
+                message_id = args[0]
+                try:
+                    msg = func(*args)
+                    if msg is not None:
+                        reply_message(message_id, msg)
+                except ChatGPTError as e:
+                    reply_message(message_id, f"{e.source}({e.code}): {e.message}")
+                except Exception as e:
+                    traceback.print_exc()
+                    reply_message(message_id, f"服务器异常: {e}")
+
+        return wrapper
+
+    return decorator
 
 
-def handle(message_id, open_id, uuid, text):
+@worker(cmd_queue)
+def handle_cmd(message_id, open_id, uuid, text):
+    if not text.startswith("/"):
+        conf = get_conf(uuid)
+        conversation_id = conf.get("conversation_id")
+        parent_ids = conf.get("parent_ids", [])
+
+        name = get_user_name(open_id)
+        title = conf.get("title", uuid)
+        title = f"{name} - {title}"
+
+        if conversation_id is None:
+            reply_message(message_id, f"开始新对话：{title}")
+
+        resp_message_id = reply_message(message_id, "", card=True)
+
+        msg_queue.put_nowait((message_id, resp_message_id, title, uuid, text, conversation_id, parent_ids))
+        return
+
+    cmds = text.split()
+    cmd = cmds[0]
+    args = cmds[1:]
+    if cmd == "/help":
+        msg = "/help: 查看命令说明\n"
+        msg += "/reset: 重新开始对话\n"
+        msg += "/delete: 删除当前对话\n"
+        msg += "/title <title>: 修改对话标题\n"
+        msg += "/rollback <n>: 回滚 n 条消息\n"
+        return msg
+    elif cmd == "/reset":
+        reset_chat(uuid)
+        return "对话已重新开始"
+
     conf = get_conf(uuid)
-    conversation_id = conf.get("conversation_id") or uuid4()
-    parent_ids = conf.get("parent_ids", [])
+    conversation_id = conf.get("conversation_id")
+
+    if cmd == "/title":
+        if not args:
+            return "标题不存在"
+
+        title = args[0].strip()
+        set_conf(uuid, dict(title=title))
+        if conversation_id is not None:
+            name = get_user_name(open_id)
+            title = f"{name} - {title}"
+            chatbot.change_title(conversation_id, title)
+        return f"成功修改标题为：{title}"
+
+    if conversation_id is None:
+        return "对话不存在"
+
+    if cmd == "/delete":
+        reset_chat(uuid)
+        chatbot.delete_conversation(conversation_id)
+        return "成功删除对话"
+    elif cmd == "/rollback":
+        if args:
+            n = int(args[0])
+        else:
+            n = 1
+
+        conf = get_conf(uuid)
+        parent_ids = conf["parent_ids"]
+        if not 1 <= n <= len(parent_ids):
+            return "回滚范围不合法"
+
+        conf["parent_ids"] = parent_ids[:-n]
+        set_conf(uuid, conf)
+        return f"成功回滚 {n} 条消息"
+
+    return "无效命令"
+
+
+@worker(msg_queue)
+def handle_msg(_, resp_message_id, title, uuid, text, conversation_id, parent_ids):
+    conversation_id = conversation_id or uuid4()
     parent_id = parent_ids[-1] if parent_ids else None
 
-    name = get_user_name(open_id)
-    title = conf.get("title", uuid)
-    title = f"{name} - {title}"
-    if conversation_id is None:
-        reply_message(message_id, f"开始新对话：{title}")
-
     msg = ""
-    resp_message_id = reply_message(message_id, msg, card=True)
     last_time = time.time()
     for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
         msg = data["message"]
@@ -108,10 +183,9 @@ def handle(message_id, open_id, uuid, text):
     if not msg:
         log.warn(f"no response for conversation {conversation_id}")
         if conversation_id is None:
-            reply_message(message_id, "获取对话结果失败：对话不存在")
+            return "获取对话结果失败：对话不存在"
         else:
-            reply_message(message_id, f"获取对话结果失败：\n{chatbot.get_msg_history(conversation_id)}")
-        return
+            return f"获取对话结果失败：\n{chatbot.get_msg_history(conversation_id)}"
 
     update_message(resp_message_id, msg, finish=True)
 
@@ -209,66 +283,7 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
     log.info(f"<{uuid}> {message.message_id}: {text}")
     text = text.replace("@_user_1", "").strip()
 
-    if text.startswith("/"):
-        cmds = text.split()
-        cmd = cmds[0]
-        args = cmds[1:]
-        if cmd == "/help":
-            msg = "/help: 查看命令说明\n"
-            msg += "/reset: 重新开始对话\n"
-            msg += "/delete: 删除当前对话\n"
-            msg += "/title <title>: 修改对话标题\n"
-            msg += "/rollback <n>: 回滚 n 条消息\n"
-        elif cmd == "/reset":
-            reset_chat(uuid)
-            msg = "对话已重新开始"
-        else:
-            conf = get_conf(uuid)
-            conversation_id = conf.get("conversation_id")
-            if cmd == "/title":
-                if args:
-                    title = args[0].strip()
-                    try:
-                        set_conf(uuid, dict(title=title))
-                        if conversation_id is not None:
-                            name = get_user_name(open_id)
-                            title = f"{name} - {title}"
-                            chatbot.change_title(conversation_id, title)
-                        msg = f"成功修改标题为：{title}"
-                    except Exception:
-                        traceback.print_exc()
-                        msg = "修改标题失败"
-                else:
-                    msg = "标题不存在"
-            elif conversation_id is None:
-                msg = "对话不存在"
-            elif cmd == "/delete":
-                try:
-                    chatbot.delete_conversation(conversation_id)
-                except Exception:
-                    pass
-                reset_chat(uuid)
-                msg = "成功删除对话"
-            elif cmd == "/rollback":
-                if args:
-                    n = int(args[0])
-                else:
-                    n = 1
-
-                conf = get_conf(uuid)
-                parent_ids = conf["parent_ids"]
-                if 1 <= n <= len(parent_ids):
-                    conf["parent_ids"] = parent_ids[:-n]
-                    set_conf(uuid, conf)
-                    msg = f"成功回滚 {n} 条消息"
-                else:
-                    msg = "回滚范围不合法"
-            else:
-                msg = "无效命令"
-
-        reply_message(message.message_id, msg)
-    else:
-        queue.put_nowait((message.message_id, open_id, uuid, text))
+    cmd_queue.put_nowait((message.message_id, open_id, uuid, text))
 
 
 MessageReceiveEventHandler.set_callback(conf, message_receive_handle)
@@ -291,7 +306,10 @@ def webhook_event():
 if __name__ == "__main__":
     from threading import Thread
 
-    thread = Thread(target=worker, args=())
-    thread.start()
+    for i in range(2):
+        Thread(target=handle_cmd, args=()).start()
+
+    # Only one message at a time allowed for ChatGPT website
+    Thread(target=handle_msg, args=()).start()
 
     app.run(debug=False, port=8000, host="0.0.0.0")
