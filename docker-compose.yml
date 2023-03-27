@@ -2,7 +2,7 @@ version: "3"
 
 services:
   chatbot:
-    build: .
+    build: bot
     image: ripples/feishu-chatbot
     restart: unless-stopped
     ports:
@@ -10,12 +10,12 @@ services:
     env_file:
       - .env
     environment:
+      - LOG_LEVEL=info
       - CHATGPT_BASE_URL=http://proxy:8080/api/
     depends_on:
       - proxy
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./chatbot.json:/src/chatbot.json:ro
       - ./db.json:/src/db.json
 
   proxy:
