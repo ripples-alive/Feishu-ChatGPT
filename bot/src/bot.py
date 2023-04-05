@@ -24,7 +24,7 @@ from larksuiteoapi.service.im.v1 import MessageReceiveEvent
 from larksuiteoapi.service.im.v1 import MessageReceiveEventHandler
 from larksuiteoapi.service.im.v1 import Service as ImService
 from larksuiteoapi.service.im.v1 import model
-from revChatGPT.typing import Error as ChatGPTError
+from revChatGPT.typings import Error as ChatGPTError
 from revChatGPT.V1 import Chatbot
 
 from file import read_json
