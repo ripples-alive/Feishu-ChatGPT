@@ -2,13 +2,13 @@
 
 [飞书开放平台](https://open.feishu.cn/app)
 
-# 事件订阅
+## 事件订阅
 
 应用详情 -> 开发配置 -> 事件订阅 -> 请求地址配置 : `http://ip:8000/webhook/chatgpt`
 
 应用详情 -> 开发配置 -> 事件订阅 -> 添加事件 : `接收消息 v2.0`
 
-# 权限
+## 权限
 
 应用详情 -> 开发配置 -> 权限管理
 
@@ -25,7 +25,9 @@ im:message.p2p_msg
 im:message.p2p_msg:readonly
 ```
 
-# 运行
+如果希望处理没有@机器人的群消息，需要额外开通 `im:message.group_msg`
+
+## 运行
 
 ```sh
 cp .env.example .env
@@ -38,3 +40,7 @@ docker-compose up -d --build
 > 在 [飞书消息卡片搭建工具](https://open.feishu.cn/tool/cardbuilder) 中上传 [loading.gif](./img/loading.gif)，获取到 key 后填入 `.env` 中后可以在机器人回复生成中显示此动图
 
 ![消息卡片图片上传](./img/upload.jpg)
+
+## ChatGPT 身份验证
+
+[文档](https://github.com/CoolPlayLin/ChatGPT-Wiki/blob/main/docs/ChatGPT/%E8%BA%AB%E4%BB%BD%E9%AA%8C%E8%AF%81.md)
