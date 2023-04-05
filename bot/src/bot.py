@@ -57,7 +57,7 @@ contact_service = ContactService(conf)
 
 log = logging.getLogger("bot")
 
-keys = ["email", "password", "access_token", "proxy"]
+keys = ["email", "password", "session_token", "access_token", "proxy"]
 bot_conf = {k: environ.get(k.upper()) for k in keys}
 bot_conf = {k: v for k, v in bot_conf.items() if v}
 chatbot = Chatbot(bot_conf)
