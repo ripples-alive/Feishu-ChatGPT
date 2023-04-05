@@ -104,6 +104,7 @@ def handle_cmd(message_id, open_id, uuid, text):
         conf = get_conf(uuid)
         conversation_id = conf.get("conversation_id")
         parent_ids = conf.get("parent_ids", [])
+        model = conf.get("model")
 
         name = get_user_name(open_id)
         title = conf.get("title", uuid)
@@ -114,7 +115,7 @@ def handle_cmd(message_id, open_id, uuid, text):
 
         resp_message_id = reply_message(message_id, "", card=True)
 
-        msg_queue.put_nowait((message_id, resp_message_id, title, uuid, text, conversation_id, parent_ids))
+        msg_queue.put_nowait((message_id, resp_message_id, title, uuid, text, conversation_id, parent_ids, model))
         return
 
     cmds = text.split()
@@ -182,12 +183,13 @@ def handle_cmd(message_id, open_id, uuid, text):
 
 
 @worker(msg_queue)
-def handle_msg(_, resp_message_id, title, uuid, text, conversation_id, parent_ids):
+def handle_msg(_, resp_message_id, title, uuid, text, conversation_id, parent_ids, model):
     conversation_id = conversation_id or uuid4()
     parent_id = parent_ids[-1] if parent_ids else None
 
     msg = ""
     last_time = time.time()
+    chatbot.config['model'] = model
     for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
         msg = data["message"]
         if time.time() - last_time > 0.3:
