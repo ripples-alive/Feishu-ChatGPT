@@ -31,7 +31,6 @@ im:message.p2p_msg:readonly
 
 ```sh
 cp .env.example .env
-cp chatbot.json.example chatbot.json
 echo {} > db.json
 
 docker-compose up -d --build
