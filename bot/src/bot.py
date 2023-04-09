@@ -189,8 +189,7 @@ def handle_msg(_, resp_message_id, title, uuid, text, conversation_id, parent_id
 
     msg = ""
     last_time = time.time()
-    chatbot.config['model'] = model
-    for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id):
+    for data in chatbot.ask(text, conversation_id=conversation_id, parent_id=parent_id, model=model):
         msg = data["message"]
         if time.time() - last_time > 0.3:
             update_message(resp_message_id, msg)
