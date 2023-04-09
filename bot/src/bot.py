@@ -99,7 +99,9 @@ def worker(queue):
 
 
 @worker(cmd_queue)
-def handle_cmd(message_id, open_id, uuid, text):
+def handle_cmd(message_id, open_id, chat_id, text):
+    uuid = f"{open_id}@{chat_id}"
+
     if not text.startswith("/"):
         conf = get_conf(uuid)
         conversation_id = conf.get("conversation_id")
@@ -107,7 +109,9 @@ def handle_cmd(message_id, open_id, uuid, text):
         model = conf.get("model")
 
         name = get_user_name(open_id)
-        title = conf.get("title", uuid)
+        title = conf.get("title")
+        if title is None:
+            title = get_group_name(chat_id)
         title = f"{name} - {title}"
 
         if conversation_id is None:
@@ -225,6 +229,22 @@ def get_user_name(open_id):
     return resp.data.user.name
 
 
+def get_group_name(chat_id):
+    req_call = im_service.chats.get()
+    req_call.set_chat_id(chat_id)
+    resp = req_call.do()
+    log.debug(f"request id = {resp.get_request_id()}")
+    log.debug(f"http status code = {resp.get_http_status_code()}")
+    if resp.code != 0:
+        log.error(f"{resp.msg}: {resp.error}")
+        return f"<{chat_id}>"
+    if resp.data.chat_mode != "group":
+        log.info(f"group mode: {resp.data.chat_mode}")
+        return f"[{resp.data.chat_mode}]"
+    log.info(f"group: {resp.data.name}")
+    return resp.data.name
+
+
 def convert_to_card(msg, finish=False):
     elements = [{"tag": "div", "text": {"tag": "plain_text", "content": msg}}]
     if not finish:
@@ -292,13 +312,12 @@ def message_receive_handle(ctx: Context, conf: Config, event: MessageReceiveEven
         return
 
     open_id = event.event.sender.sender_id.open_id
-    uuid = f"{open_id}@{message.chat_id}"
 
     text: str = json.loads(message.content).get("text")
-    log.info(f"<{uuid}> {message.message_id}: {text}")
+    log.info(f"<{open_id}@{message.chat_id}> {message.message_id}: {text}")
     text = text.replace("@_user_1", "").strip()
 
-    cmd_queue.put_nowait((message.message_id, open_id, uuid, text))
+    cmd_queue.put_nowait((message.message_id, open_id, message.chat_id, text))
 
 
 MessageReceiveEventHandler.set_callback(conf, message_receive_handle)
