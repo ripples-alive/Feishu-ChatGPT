@@ -128,7 +128,7 @@ def handle_cmd(message_id, open_id, chat_id, text):
     if cmd == "/help":
         msg = "/help: 查看命令说明\n"
         msg += "/reset: 重新开始对话\n"
-        msg += "/title <title>: 修改对话标题\n"
+        msg += "/title <title>: 修改对话标题，为空则表示清除标题设置\n"
         msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}）\n"
         msg += "/rollback <n>: 回滚 n 条消息\n"
         return msg
@@ -143,11 +143,16 @@ def handle_cmd(message_id, open_id, chat_id, text):
             chatbot.delete_conversation(conversation_id)
         return "对话已重新开始"
     elif cmd == "/title":
-        if not args:
-            return "标题不存在"
+        if args:
+            title = args[0].strip()
+        else:
+            title = None
 
-        title = args[0].strip()
         set_conf(uuid, dict(title=title))
+
+        if title is None:
+            return "成功清除标题设置"
+
         if conversation_id is not None:
             name = get_user_name(open_id)
             title = f"{name} - {title}"
