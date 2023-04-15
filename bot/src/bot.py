@@ -129,7 +129,7 @@ def handle_cmd(message_id, open_id, chat_id, text):
         msg = "/help: 查看命令说明\n"
         msg += "/reset: 重新开始对话\n"
         msg += "/title <title>: 修改对话标题，为空则表示清除标题设置\n"
-        msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}）\n"
+        msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}），修改模型会自动重置对话\n"
         msg += "/rollback <n>: 回滚 n 条消息\n"
         return msg
 
@@ -167,7 +167,9 @@ def handle_cmd(message_id, open_id, chat_id, text):
         if model not in ALL_MODELS:
             return "模型不存在"
 
-        set_conf(uuid, dict(model=ALL_MODELS[model]))
+        set_conf(uuid, dict(model=ALL_MODELS[model], conversation_id=None, parent_ids=[]))
+        if conversation_id is not None:
+            chatbot.delete_conversation(conversation_id)
         return f"成功修改模型为：{model} ({ALL_MODELS[model]})"
 
     if conversation_id is None:
