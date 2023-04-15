@@ -105,8 +105,7 @@ def handle_cmd(message_id, open_id, chat_id, text):
     if not text.startswith("/"):
         conf = get_conf(uuid)
         conversation_id = conf.get("conversation_id")
-        parent_ids = conf.get("parent_ids", [])
-        model = conf.get("model")
+        prompt = conf.get("prompt")
 
         name = get_user_name(open_id)
         title = conf.get("title")
@@ -117,9 +116,13 @@ def handle_cmd(message_id, open_id, chat_id, text):
         if conversation_id is None:
             reply_message(message_id, f"开始新对话：{title}")
 
-        resp_message_id = reply_message(message_id, "", card=True)
+            if prompt:
+                resp_message_id = reply_message(message_id, "", card=True)
+                msg_queue.put_nowait((message_id, resp_message_id, title, uuid, prompt))
 
-        msg_queue.put_nowait((message_id, resp_message_id, title, uuid, text, conversation_id, parent_ids, model))
+        resp_message_id = reply_message(message_id, "", card=True)
+        msg_queue.put_nowait((message_id, resp_message_id, title, uuid, text))
+
         return
 
     cmds = text.split()
@@ -128,8 +131,9 @@ def handle_cmd(message_id, open_id, chat_id, text):
     if cmd == "/help":
         msg = "/help: 查看命令说明\n"
         msg += "/reset: 重新开始对话\n"
-        msg += "/title <title>: 修改对话标题，为空则表示清除标题设置\n"
+        msg += "/title <title>: 修改对话标题，为空则表示清除设置\n"
         msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}），修改模型会自动重置对话\n"
+        msg += "/prompt <prompt>: 修改 Prompt，为空则表示清除设置，修改 Prompt 会自动重置对话\n"
         msg += "/rollback <n>: 回滚 n 条消息\n"
         return msg
 
@@ -137,10 +141,7 @@ def handle_cmd(message_id, open_id, chat_id, text):
     conversation_id = conf.get("conversation_id")
 
     if cmd == "/reset":
-        chatbot.reset_chat()
-        set_conf(uuid, dict(conversation_id=None, parent_ids=[]))
-        if conversation_id is not None:
-            chatbot.delete_conversation(conversation_id)
+        reset_chat(uuid)
         return "对话已重新开始"
     elif cmd == "/title":
         if args:
@@ -158,8 +159,20 @@ def handle_cmd(message_id, open_id, chat_id, text):
             title = f"{name} - {title}"
             chatbot.change_title(conversation_id, title)
         return f"成功修改标题为：{title}"
+    elif cmd == "/prompt":
+        if args:
+            prompt = " ".join(args)
+        else:
+            prompt = None
 
-    if cmd == "/model":
+        set_conf(uuid, dict(prompt=prompt))
+
+        if prompt is None:
+            return "成功清除 Prompt 设置"
+
+        reset_chat(uuid)
+        return f"成功修改 Prompt 为：{prompt}\n\n对话已重新开始"
+    elif cmd == "/model":
         if not args:
             return "模型不存在"
 
@@ -167,10 +180,9 @@ def handle_cmd(message_id, open_id, chat_id, text):
         if model not in ALL_MODELS:
             return "模型不存在"
 
-        set_conf(uuid, dict(model=ALL_MODELS[model], conversation_id=None, parent_ids=[]))
-        if conversation_id is not None:
-            chatbot.delete_conversation(conversation_id)
-        return f"成功修改模型为：{model} ({ALL_MODELS[model]})"
+        set_conf(uuid, dict(model=ALL_MODELS[model]))
+        reset_chat(uuid)
+        return f"成功修改模型为：{model} ({ALL_MODELS[model]})\n\n对话已重新开始"
 
     if conversation_id is None:
         return "对话不存在"
@@ -194,9 +206,12 @@ def handle_cmd(message_id, open_id, chat_id, text):
 
 
 @worker(msg_queue)
-def handle_msg(_, resp_message_id, title, uuid, text, conversation_id, parent_ids, model):
-    conversation_id = conversation_id or uuid4()
+def handle_msg(_, resp_message_id, title, uuid, text):
+    conf = get_conf(uuid)
+    conversation_id = conf.get("conversation_id") or uuid4()
+    parent_ids = conf.get("parent_ids", [])
     parent_id = parent_ids[-1] if parent_ids else None
+    model = conf.get("model")
 
     msg = ""
     last_time = time.time()
@@ -221,6 +236,15 @@ def handle_msg(_, resp_message_id, title, uuid, text, conversation_id, parent_id
 
     # automatically rename everytime
     chatbot.change_title(data["conversation_id"], title)
+
+
+def reset_chat(uuid):
+    chatbot.reset_chat()
+    conf = get_conf(uuid)
+    conversation_id = conf.get("conversation_id")
+    set_conf(uuid, dict(conversation_id=None, parent_ids=[]))
+    if conversation_id is not None:
+        chatbot.delete_conversation(conversation_id)
 
 
 def get_user_name(open_id):
