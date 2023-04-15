@@ -38,6 +38,7 @@ ALL_MODELS = {
     "legacy": "text-davinci-002-render-paid",
     "gpt-4": "gpt-4",
 }
+DEFAULT_MODEL = ALL_MODELS["default"]
 
 # 企业自建应用的配置
 # AppID、AppSecret: "开发者后台" -> "凭证与基础信息" -> 应用凭证（AppID、AppSecret）
@@ -132,7 +133,7 @@ def handle_cmd(message_id, open_id, chat_id, text):
         msg = "/help: 查看命令说明\n"
         msg += "/reset: 重新开始对话\n"
         msg += "/title <title>: 修改对话标题，为空则表示清除设置\n"
-        msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}），修改模型会自动重置对话\n"
+        msg += f"/model <model>: 修改使用的模型（{', '.join(ALL_MODELS)}），为空则显示当前模型，修改模型会自动重置对话\n"
         msg += "/prompt <prompt>: 修改 Prompt，为空则表示清除设置，修改 Prompt 会自动重置对话\n"
         msg += "/rollback <n>: 回滚 n 条消息\n"
         return msg
@@ -174,7 +175,8 @@ def handle_cmd(message_id, open_id, chat_id, text):
         return f"成功修改 Prompt 为：{prompt}\n\n对话已重新开始"
     elif cmd == "/model":
         if not args:
-            return "模型不存在"
+            model = conf.get("model", DEFAULT_MODEL)
+            return f"当前模型为：{model}"
 
         model = args[0].strip().lower()
         if model not in ALL_MODELS:
@@ -211,7 +213,7 @@ def handle_msg(_, resp_message_id, title, uuid, text):
     conversation_id = conf.get("conversation_id") or uuid4()
     parent_ids = conf.get("parent_ids", [])
     parent_id = parent_ids[-1] if parent_ids else None
-    model = conf.get("model")
+    model = conf.get("model", DEFAULT_MODEL)
 
     msg = ""
     last_time = time.time()
